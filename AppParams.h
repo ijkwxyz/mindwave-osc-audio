@@ -22,18 +22,24 @@ struct AppParams {
     Audio* audio;
 
     void usage(std::string exe) {
-        std::cout   << "Usage: " << exe << " -d <MindWave device> -s <OSC server>"
-#ifdef AUDIO_NULL
-					<< "-a <audio device #>"
+        std::cout   << "Usage: " << exe << " -d <MindWave device> -s <OSC server>:<port>"
+#ifndef AUDIO_NULL
+					<< " -a <audio device #>"
 #endif
 					<< std::endl
+					<< std::endl
+					<< "Defaults:" << std::endl
+					<< "    Mindwave device: /dev/cu.Mindwave" << std::endl
+					<< "    Server: localhost" << std::endl
+					<< "    Port: 9000" << std::endl
+					<< std::endl
                     << "Other:" << std::endl
-#ifdef AUDIO_NULL
+#ifndef AUDIO_NULL
 					<< "   -g <float> : Increase gain of audio wave\n"
                     << "   --probe : List out audio devices and quit\n"
 #endif
-                    << "   --record <file> record incoming to <file> simultaneously\n"
-                    << "   --play <file> : Do not connect to MindWave, instead play from file\n"
+                    << "   --record <file> : record incoming mindwave stream to <file>\n"
+                    << "   --play <file> : Do not connect to MindWave, instead play from <file>\n"
                     //<< "   --test <num> : Play test output\n"
                     //<< std::endl
                     //<< "Tests:\n"
