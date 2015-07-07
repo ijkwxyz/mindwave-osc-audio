@@ -6,7 +6,6 @@
 #include "Audio.h"
 
 #include "AppParams.h"
-#include <curl/curl.h>
 
 void handleSignal( float v );
 void handleAttention( float v );
