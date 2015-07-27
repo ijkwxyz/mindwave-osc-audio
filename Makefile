@@ -1,6 +1,7 @@
-CPP=g++
+CXX=g++
 CC=gcc
 CFLAGS=-O3 -DAUDIO_NULL
+CXXFLAGS=$(CFLAGS) -std=c++0x
 LIBS=
 
 DEPS = AppParams.h RecorderPlayback.h oscpkt.hh
@@ -10,13 +11,13 @@ DEPS = AppParams.h RecorderPlayback.h oscpkt.hh
 all: mw2osc
 
 main.o: main.cpp $(DEPS)
-	$(CPP) -c -o $@ $< $(CFLAGS)
+	$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 tgsp.o: ThinkGearStreamParser.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)    
     
 mw2osc: main.o tgsp.o
-	$(CPP) -o $@ $^ $(CFLAGS) $(LIBS)
+	$(CXX) -o $@ $^ $(CXXFLAGS) $(LIBS)
     
 .PHONY: clean
 
