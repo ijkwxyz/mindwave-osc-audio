@@ -77,7 +77,7 @@ void handleEeg( int* vals )
     for(int i = 0; i < 8; ++i) {
         msg.pushInt32(vals[i]);
     }
-    
+
     pw.startBundle().addMessage(msg).endBundle();
 
     if(!sock.sendPacket(pw.packetData(), pw.packetSize()))
@@ -96,7 +96,7 @@ void handleRaw( float v )
     static int count = 0;
     float gain = 1.0f;
     if(count < 0)
-    {   
+    {
         gain = 0.0f;
         ++count;
     }
@@ -168,11 +168,11 @@ handleDataValueFunc( unsigned char extendedCodeLevel,
             //isConnected = false;
             break;
 
-        case( 0x80 ): { 
+        case( 0x80 ): {
             int raw = (value[1]&0xFF)+((value[0]&0xFF)<<8);
             if(raw >= 32768)
                 raw-=65536;
-    
+
             // Sometimes there is still some raw data "in the pipe"
             // So ignore any until it connects
             if(isConnected) {
@@ -198,7 +198,7 @@ SERIAL open_device(std::string dev)
 {
     //return fopen( dev.c_str(), "r+" );
 
-    int USB = open( dev.c_str(), O_RDWR| O_NONBLOCK | O_NDELAY );
+    int USB = open( dev.c_str(), O_RDWR| O_NOCTTY | O_NDELAY );
 
     /* Error Handling */
     if ( USB < 0 )
@@ -229,7 +229,7 @@ SERIAL open_device(std::string dev)
     tty.c_lflag     =   0;          // no signaling chars, no echo, no canonical processing
     tty.c_oflag     =   0;                  // no remapping, no delays
     tty.c_cc[VMIN]      =   0;                  // read doesn't block
-    tty.c_cc[VTIME]     =   5;                  // 0.5 seconds read timeout
+    tty.c_cc[VTIME]     =   0;                  // 0.5 seconds read timeout
 
     tty.c_cflag     |=  CREAD | CLOCAL;     // turn on READ & ignore ctrl lines
     tty.c_iflag     &=  ~(IXON | IXOFF | IXANY);// turn off s/w flow ctrl
@@ -253,9 +253,18 @@ unsigned char dread(SERIAL dev)
 {
     unsigned char byte;
     //fread( &byte, 1, 1, dev );
-    read(dev, &byte, 1);
-
-    return byte;
+    //while(read(dev, &byte, 1)==0) {}
+    while(true) {
+        fd_set readfs;
+        FD_ZERO(&readfs);
+        FD_SET(dev, &readfs);
+        select(dev+1, &readfs, NULL, NULL, NULL);
+        if( FD_ISSET(dev, &readfs) )
+        {
+            if(read(dev, &byte, 1) != 0)
+                return byte;
+        }
+    }
 }
 
 void dwrite(SERIAL dev, unsigned char byte)
@@ -266,12 +275,12 @@ void dwrite(SERIAL dev, unsigned char byte)
 
 
 /* Usage: brain -d <MindWave device> -s <OSC server to send messages> -a <audio device #>
- *      other:  
+ *      other:
  *           --probe : List out audio devices and quit
  *           --record <file> record incoming to <file> simultaneously
  *           --playback <file> : Do not connect to MindWave device, instead play from file
  *           --test <num> : Play through test output
- * 
+ *
  * Tests:
  *   0: Send out sawtooth wave on audio device
  *   1: Replace raw signal output with 1, -1 signal repeating
@@ -285,7 +294,7 @@ int main( int argc, char **argv ) {
 #endif
 
 #ifdef AUDIO_RT
-	params.audio = new Audio_RT();
+ 	params.audio = new Audio_RT();
 #endif
 
 #ifdef AUDIO_PA
@@ -336,7 +345,7 @@ int main( int argc, char **argv ) {
         if(stream)
         {
             printf("Listening on %s...\n", params.deviceName.c_str());
-        } 
+        }
         else
         {
             printf("Failed to open %s\n", params.deviceName.c_str());
