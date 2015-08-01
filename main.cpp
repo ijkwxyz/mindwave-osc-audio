@@ -29,6 +29,16 @@ UdpSocket raw_sock;
 
 AppParams params;
 
+
+void sendOscStatus( std::string status )
+{
+    PacketWriter pw;
+    Message msg(root+"/"+status);
+    pw.startBundle().addMessage(msg).endBundle();
+    if(!sock.sendPacket(pw.packetData(), pw.packetSize()))
+        printf( "Could not send status: %s\n", status.c_str() );
+}
+
 void handleSignal( float v )
 {
     printf( "Signal Level: %f\n", v );
@@ -149,6 +159,8 @@ handleDataValueFunc( unsigned char extendedCodeLevel,
         case( 0xD4 ):
             printf( "Standby/Scan\n" );
             sendConnect = true;
+            sendOscStatus("scanning");
+
             //isConnected = false;
             break;
 
@@ -165,6 +177,7 @@ handleDataValueFunc( unsigned char extendedCodeLevel,
         case( 0xD3 ):
             printf( "Denied!\n" );
             sendConnect = true;
+            sendOscStatus("denied");
             //isConnected = false;
             break;
 
@@ -337,6 +350,18 @@ int main( int argc, char **argv ) {
         RecorderPlayback::startRecording();
     }
 
+    sock.connectTo(params.server, params.port);
+
+    if(sock.isOk())
+        printf("Sending OSC to %s:%d\n", params.server.c_str(), params.port);
+    else {
+        printf("Failed to connect to %s:%d\n", params.server.c_str(), params.port);
+        return 0;
+    }
+
+    // Send boot message
+    sendOscStatus("boot");
+
     SERIAL stream ;
     if(!params.playback)
     {
@@ -353,17 +378,8 @@ int main( int argc, char **argv ) {
         }
     }
 
-    sock.connectTo(params.server, params.port);
-
-    if(sock.isOk())
-    {
-        printf("Sending OSC to %s:%d\n", params.server.c_str(), params.port);
-    } 
-    else
-    {
-        printf("Failed to connect to %s:%d\n", params.server.c_str(), params.port);
-        return 0;
-    }
+    // Send open message
+    sendOscStatus("open");
 
     if( !params.playback )
     {
