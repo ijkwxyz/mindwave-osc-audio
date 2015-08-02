@@ -29,7 +29,7 @@ struct AppParams {
 					<< std::endl
 					<< std::endl
 					<< "Defaults:" << std::endl
-					<< "    Mindwave device: /dev/cu.Mindwave" << std::endl
+					<< "    Mindwave device: "<< deviceName << std::endl
 					<< "    Server: localhost" << std::endl
 					<< "    Port: 9000" << std::endl
 					<< std::endl
@@ -48,7 +48,11 @@ struct AppParams {
     }
 
     AppParams( ) :
+#if defined(__APPLE__)
         deviceName("/dev/cu.MindWave"),
+#else
+        deviceName("/dev/ttyUSB0"),
+#endif
         server("localhost"),
         port(9000),
         audioDevice(2),
