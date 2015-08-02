@@ -1,4 +1,9 @@
 #include <stdio.h>
+#include <unistd.h>     // UNIX standard function definitions
+#include <fcntl.h>      // File control definitions
+#include <errno.h>      // Error number definitions
+#include <termios.h>    // POSIX terminal control definitions
+
 #include "ThinkGearStreamParser.h"
 #define OSCPKT_OSTREAM_OUTPUT
 #include "oscpkt.hh"
@@ -23,6 +28,16 @@ std::string root = "/mindwave/1";
 UdpSocket raw_sock;
 
 AppParams params;
+
+
+void sendOscStatus( std::string status )
+{
+    PacketWriter pw;
+    Message msg(root+"/"+status);
+    pw.startBundle().addMessage(msg).endBundle();
+    if(!sock.sendPacket(pw.packetData(), pw.packetSize()))
+        printf( "Could not send status: %s\n", status.c_str() );
+}
 
 void handleSignal( float v )
 {
@@ -72,7 +87,7 @@ void handleEeg( int* vals )
     for(int i = 0; i < 8; ++i) {
         msg.pushInt32(vals[i]);
     }
-    
+
     pw.startBundle().addMessage(msg).endBundle();
 
     if(!sock.sendPacket(pw.packetData(), pw.packetSize()))
@@ -91,7 +106,7 @@ void handleRaw( float v )
     static int count = 0;
     float gain = 1.0f;
     if(count < 0)
-    {   
+    {
         gain = 0.0f;
         ++count;
     }
@@ -144,6 +159,8 @@ handleDataValueFunc( unsigned char extendedCodeLevel,
         case( 0xD4 ):
             printf( "Standby/Scan\n" );
             sendConnect = true;
+            sendOscStatus("scanning");
+
             //isConnected = false;
             break;
 
@@ -160,14 +177,15 @@ handleDataValueFunc( unsigned char extendedCodeLevel,
         case( 0xD3 ):
             printf( "Denied!\n" );
             sendConnect = true;
+            sendOscStatus("denied");
             //isConnected = false;
             break;
 
-        case( 0x80 ): { 
+        case( 0x80 ): {
             int raw = (value[1]&0xFF)+((value[0]&0xFF)<<8);
             if(raw >= 32768)
                 raw-=65536;
-    
+
             // Sometimes there is still some raw data "in the pipe"
             // So ignore any until it connects
             if(isConnected) {
@@ -187,13 +205,95 @@ handleDataValueFunc( unsigned char extendedCodeLevel,
     }
 }
 
+//typedef FILE* SERIAL;
+typedef int SERIAL;
+SERIAL open_device(std::string dev)
+{
+    //return fopen( dev.c_str(), "r+" );
+
+    int USB = open( dev.c_str(), O_RDWR| O_NOCTTY | O_NDELAY );
+
+    /* Error Handling */
+    if ( USB < 0 )
+    {
+        std::cout << "Error " << errno << " opening " << "/dev/ttyUSB0" << ": " << strerror (errno) << std::endl;
+    }
+
+    /* *** Configure Port *** */
+    struct termios tty;
+    memset (&tty, 0, sizeof tty);
+
+    /* Error Handling */
+    if ( tcgetattr ( USB, &tty ) != 0 )
+    {
+        std::cout << "Error " << errno << " from tcgetattr: " << strerror(errno) << std::endl;
+    }
+
+    /* Set Baud Rate */
+    cfsetospeed (&tty, B115200);
+    cfsetispeed (&tty, B115200);
+
+    /* Setting other Port Stuff */
+    tty.c_cflag     &=  ~PARENB;        // Make 8n1
+    tty.c_cflag     &=  ~CSTOPB;
+    tty.c_cflag     &=  ~CSIZE;
+    tty.c_cflag     |=  CS8;
+    tty.c_cflag     &=  ~CRTSCTS;       // no flow control
+    tty.c_lflag     =   0;          // no signaling chars, no echo, no canonical processing
+    tty.c_oflag     =   0;                  // no remapping, no delays
+    tty.c_cc[VMIN]      =   0;                  // read doesn't block
+    tty.c_cc[VTIME]     =   0;                  // 0.5 seconds read timeout
+
+    tty.c_cflag     |=  CREAD | CLOCAL;     // turn on READ & ignore ctrl lines
+    tty.c_iflag     &=  ~(IXON | IXOFF | IXANY);// turn off s/w flow ctrl
+    tty.c_lflag     &=  ~(ICANON | ECHO | ECHOE | ISIG); // make raw
+    tty.c_oflag     &=  ~OPOST;              // make raw
+
+    /* Flush Port, then applies attributes */
+    tcflush( USB, TCIFLUSH );
+
+    if ( tcsetattr ( USB, TCSANOW, &tty ) != 0)
+    {
+        std::cout << "Error " << errno << " from tcsetattr" << std::endl;
+    }
+
+    return USB;
+}
+
+
+
+unsigned char dread(SERIAL dev)
+{
+    unsigned char byte;
+    //fread( &byte, 1, 1, dev );
+    //while(read(dev, &byte, 1)==0) {}
+    while(true) {
+        fd_set readfs;
+        FD_ZERO(&readfs);
+        FD_SET(dev, &readfs);
+        select(dev+1, &readfs, NULL, NULL, NULL);
+        if( FD_ISSET(dev, &readfs) )
+        {
+            if(read(dev, &byte, 1) != 0)
+                return byte;
+        }
+    }
+}
+
+void dwrite(SERIAL dev, unsigned char byte)
+{
+    //fwrite( &byte, 1, 1, dev);
+    write(dev, &byte, 1);
+}
+
+
 /* Usage: brain -d <MindWave device> -s <OSC server to send messages> -a <audio device #>
- *      other:  
+ *      other:
  *           --probe : List out audio devices and quit
  *           --record <file> record incoming to <file> simultaneously
  *           --playback <file> : Do not connect to MindWave device, instead play from file
  *           --test <num> : Play through test output
- * 
+ *
  * Tests:
  *   0: Send out sawtooth wave on audio device
  *   1: Replace raw signal output with 1, -1 signal repeating
@@ -207,7 +307,7 @@ int main( int argc, char **argv ) {
 #endif
 
 #ifdef AUDIO_RT
-	params.audio = new Audio_RT();
+ 	params.audio = new Audio_RT();
 #endif
 
 #ifdef AUDIO_PA
@@ -250,14 +350,27 @@ int main( int argc, char **argv ) {
         RecorderPlayback::startRecording();
     }
 
-    FILE *stream ;
+    sock.connectTo(params.server, params.port);
+
+    if(sock.isOk())
+        printf("Sending OSC to %s:%d\n", params.server.c_str(), params.port);
+    else {
+        printf("Failed to connect to %s:%d\n", params.server.c_str(), params.port);
+        return 0;
+    }
+
+    // Send boot message
+    sendOscStatus("boot");
+
+    SERIAL stream ;
     if(!params.playback)
     {
-        stream = fopen( params.deviceName.c_str(), "r+" );
+        stream = open_device(params.deviceName);
+
         if(stream)
         {
             printf("Listening on %s...\n", params.deviceName.c_str());
-        } 
+        }
         else
         {
             printf("Failed to open %s\n", params.deviceName.c_str());
@@ -265,29 +378,20 @@ int main( int argc, char **argv ) {
         }
     }
 
-    sock.connectTo(params.server, params.port);
-
-    if(sock.isOk())
-    {
-        printf("Sending OSC to %s:%d\n", params.server.c_str(), params.port);
-    } 
-    else
-    {
-        printf("Failed to connect to %s:%d\n", params.server.c_str(), params.port);
-        return 0;
-    }
+    // Send open message
+    sendOscStatus("open");
 
     if( !params.playback )
     {
     	unsigned char autoC = 0xC2;
-    	fwrite( &autoC, 1, 1, stream);
+    	dwrite( stream, autoC );
 
         unsigned char streamByte;
         while( 1 ) {
-            fread( &streamByte, 1, 1, stream );
+            streamByte = dread( stream );
             THINKGEAR_parseByte( &parser, streamByte );
             if(sendConnect)
-                fwrite( &autoC, 1, 1, stream);
+                dwrite( stream, autoC );
             sendConnect = false;
 
         }
