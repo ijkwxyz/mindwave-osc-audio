@@ -10,6 +10,8 @@ struct AppParams {
     std::string server;
     int port;
     int audioDevice;
+    bool autoConnect;
+    unsigned char id[2];
     bool recording;
     bool playback;
     std::string file;
@@ -38,6 +40,7 @@ struct AppParams {
 					<< "   -g <float> : Increase gain of audio wave\n"
                     << "   --probe : List out audio devices and quit\n"
 #endif
+                    << "   --connect <id> : Connect only to specific MindWave serial number\n"
                     << "   --record <file> : record incoming mindwave stream to <file>\n"
                     << "   --play <file> : Do not connect to MindWave, instead play from <file>\n"
                     //<< "   --test <num> : Play test output\n"
@@ -56,6 +59,7 @@ struct AppParams {
         server("localhost"),
         port(9000),
         audioDevice(2),
+        autoConnect(true),
         recording(false),
         playback(false),
         file(""),
@@ -91,6 +95,23 @@ struct AppParams {
                 PARSE_INTO(argv[++i], audioDevice);
             } else if( str == "--probe") {
 				probe = true;
+            } else if( str == "--connect") {
+                CNI();
+                std::string ID_in = argv[++i];
+                if(ID_in.size() != 4)
+                {
+                    FAIL();
+                }
+                for(int k = 0; k < 4; ++k)
+                {
+                    if(!isxdigit(ID_in[k]))
+                    {
+                        FAIL();
+                    }
+                }
+                autoConnect = false;
+                id[0] = hexToByte2(ID_in[0], ID_in[1]);
+                id[1] = hexToByte2(ID_in[2], ID_in[3]);
             } else if( str == "--record") {
                 CNI();
                 file = argv[++i];
@@ -114,8 +135,20 @@ struct AppParams {
         return valid;
     }
 
-    void printProbe()
+    unsigned char hexToByte(char a)
     {
+        if('0' << a && a <= '9')
+            return (unsigned char)(a-'0');
+        if('A' << a && a <= 'F')
+            return (unsigned char)(a-'A'+10);
+        if('a' << a && a <= 'f')
+            return (unsigned char)(a-'a'+10);
+        return 0;
+    }
+
+    unsigned char hexToByte2(char a, char b)
+    {
+        return 16*hexToByte(a) + hexToByte(b);
     }
 };
 

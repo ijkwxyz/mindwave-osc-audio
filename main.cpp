@@ -286,6 +286,19 @@ void dwrite(SERIAL dev, unsigned char byte)
     write(dev, &byte, 1);
 }
 
+void connect(SERIAL dev) {
+    unsigned char autoC = 0xC2;
+    unsigned char conn = 0xC0;
+
+    if(params.autoConnect) {
+        dwrite( dev, 0xC2 );
+    } else {
+        dwrite( dev, 0xC0 );
+        dwrite( dev, params.id[0] );
+        dwrite( dev, params.id[1] );
+
+    }
+}
 
 /* Usage: brain -d <MindWave device> -s <OSC server to send messages> -a <audio device #>
  *      other:
@@ -383,15 +396,14 @@ int main( int argc, char **argv ) {
 
     if( !params.playback )
     {
-    	unsigned char autoC = 0xC2;
-    	dwrite( stream, autoC );
+        connect( stream );
 
         unsigned char streamByte;
         while( 1 ) {
             streamByte = dread( stream );
             THINKGEAR_parseByte( &parser, streamByte );
             if(sendConnect)
-                dwrite( stream, autoC );
+                connect( stream );
             sendConnect = false;
 
         }
